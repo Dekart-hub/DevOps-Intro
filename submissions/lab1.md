@@ -80,3 +80,34 @@ A signed commit attaches a cryptographic signature proving it was really made by
 - Discover new projects through their activity
 - Build professional connections beyond the classroom
 - Stay updated on classmates' work for future collaboration
+
+## Bonus
+
+```
+➜  DevOps-Intro git:(main) git commit -S=false -s --allow-empty -m "test: unsigned commit (should fail)"
+error: Couldn't load public key =false: No such file or directory?
+
+fatal: failed to write commit object
+➜  DevOps-Intro git:(main) git commit --no-gpg-sign -s --allow-empty -m "test: unsigned commit (should fail)"
+[main ff7d699] test: unsigned commit (should fail)
+➜  DevOps-Intro git:(main) git push origin main
+Enumerating objects: 1, done.
+Counting objects: 100% (1/1), done.
+Writing objects: 100% (1/1), 237 bytes | 237.00 KiB/s, done.
+Total 1 (delta 0), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: error: GH013: Repository rule violations found for refs/heads/main.
+remote: Review all repository rules at https://github.com/Dekart-hub/DevOps-Intro/rules?ref=refs%2Fheads%2Fmain
+remote: 
+remote: - Changes must be made through a pull request.
+remote: 
+remote: - Commits must have verified signatures.
+remote:   Found 1 violation:
+remote: 
+remote:   ff7d6992fd74c478a9629ec052959d3f82ae70bb
+remote: 
+To github.com:Dekart-hub/DevOps-Intro.git
+ ! [remote rejected] main -> main (push declined due to repository rule violations)
+error: failed to push some refs to 'github.com:Dekart-hub/DevOps-Intro.git'
+```
+
+No need for re-enabling anything because changes in signing made only for this commit. 
