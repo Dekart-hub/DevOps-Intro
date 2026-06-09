@@ -83,18 +83,9 @@ A signed commit attaches a cryptographic signature proving it was really made by
 
 ## Bonus
 
-```
-➜  DevOps-Intro git:(main) git commit -S=false -s --allow-empty -m "test: unsigned commit (should fail)"
-error: Couldn't load public key =false: No such file or directory?
+![Branch rules](verif_screen.png "Screenshot of rules for branches")
 
-fatal: failed to write commit object
-➜  DevOps-Intro git:(main) git commit --no-gpg-sign -s --allow-empty -m "test: unsigned commit (should fail)"
-[main ff7d699] test: unsigned commit (should fail)
-➜  DevOps-Intro git:(main) git push origin main
-Enumerating objects: 1, done.
-Counting objects: 100% (1/1), done.
-Writing objects: 100% (1/1), 237 bytes | 237.00 KiB/s, done.
-Total 1 (delta 0), reused 0 (delta 0), pack-reused 0 (from 0)
+```
 remote: error: GH013: Repository rule violations found for refs/heads/main.
 remote: Review all repository rules at https://github.com/Dekart-hub/DevOps-Intro/rules?ref=refs%2Fheads%2Fmain
 remote: 
@@ -111,3 +102,7 @@ error: failed to push some refs to 'github.com:Dekart-hub/DevOps-Intro.git'
 ```
 
 No need for re-enabling anything because changes in signing made only for this commit. 
+
+### what would Knight Capital's deploy day have looked like with branch protection + required signing on the prod deploy branch?
+
+With branch protection on the prod deploy branch, nothing could reach production without an approved pull request, a green CI run, and linear history - so the release would come from a single reviewed, known-good commit instead of an engineer hand-deploying to 8 servers off a manual checklist where one box silently gets missed. Required signing would make every commit on that branch cryptographically attributable, so you can prove the deployed artifact is exactly the reviewed code and not stale, unverified code lingering on one server.That said, branch protection alone wouldn't have caught Knight's actual trigger - reusing the dormant Power flag and a partial, manual rollout - because that was a deploy-automation failure, not an unsigned-commit problem. 
