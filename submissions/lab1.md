@@ -64,3 +64,19 @@ Date:   Tue Jun 9 18:07:21 2026 +0300
 
 #### Why signed commits matter:
 A signed commit attaches a cryptographic signature proving it was really made by the holder of a specific key, giving you verifiable provenance for every change. This is the class of trust problem the March 2024 xz-utils backdoor exposed.
+
+## Task 3
+
+### GitHub Community:
+
+**Why Stars Matter:**
+- Stars help you bookmark interesting projects for later reference
+- Star count indicates project popularity and community trust
+- Starred repos appear in your GitHub profile, showing your interests
+- Stars encourage maintainers and help projects gain visibility
+
+**Why Following Matters:**
+- See what other developers are working on
+- Discover new projects through their activity
+- Build professional connections beyond the classroom
+- Stay updated on classmates' work for future collaboration
