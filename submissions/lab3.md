@@ -42,17 +42,20 @@ Link to a **green** CI run: `<https://github.com/Dekart-hub/DevOps-Intro/actions
 
 ### 1.5 Prove the gate blocks a failure
 
-I broke a test on purpose — flipped the expected note count in `app/handlers_test.go` (`TestHealth_ReportsCount`, `!= 1` → `!= 2`), pushed, confirmed the `test` cells went red and `ci-ok` failed so the PR could not merge, then reverted with a follow-up commit and confirmed green again.
+I broke a test on purpose — flipped the expected note count in `app/handlers_test.go` (`TestHealth_ReportsCount`, `!= 1` → `!= 2`) and pushed it to PR #3. Both `test` cells (`1.23` and `1.24`) went red, so the `ci-ok` aggregation gate failed and PR #3's merge state flipped to **BLOCKED** — "Required statuses must pass before merging" (`lab3_gate_blocked.png`). I then reverted the break with a follow-up commit and the pipeline returned to green, merge state back to **CLEAN**.
 
-> **TODO:** paste the failing-run log excerpt (or link) and the fix-commit SHA.
-> - Failed run: `<link or log>`
-> - Fix commit: `<sha>`
+> Note: the PR's `mergeable` flag stayed `MERGEABLE` the whole time — that flag only tracks merge *conflicts*. It was `mergeStateStatus = BLOCKED`, driven by the failing required `ci-ok` check, that actually stopped the merge.
+
+- **Failed run:** <https://github.com/Dekart-hub/DevOps-Intro/actions/runs/28046026697> — `test (1.23)` + `test (1.24)` → failure ⇒ `ci-ok` → failure.
+- **Break commit:** `9aac3da`.
+- **Fix (revert) commit:** `64266d9` — green run <https://github.com/Dekart-hub/DevOps-Intro/actions/runs/28047672107>, PR back to `CLEAN`.
+- **Screenshot:** `submissions/lab3_gate_blocked.png` (PR #3 merge blocked by the red `ci-ok`).
 
 ### 1.6 Branch protection
 
-On **my fork** (`Dekart-hub/DevOps-Intro`), `main` requires status checks to pass and branches to be up to date before merging; the single required check is **`ci-ok`** (the aggregation job — see §2.2 for why I require only it). This sits on top of the Lab 1 ruleset (signed commits, PR-before-merge, linear history).
+On **my fork** (`Dekart-hub/DevOps-Intro`), `main` requires status checks to pass and branches to be up to date before merging; the single required check is **`ci-ok`** (the aggregation job — see §2.2 for why I require only it). I added this as a dedicated ruleset (`Lab_3_1_5`: require status checks + "require branches up to date"), which stacks additively on top of the Lab 1 ruleset (`Bonus_lab1`: signed commits, PR-before-merge, linear history) — both target `main`, so the merge gate is the union of the two.
 
-> **TODO:** branch-protection / ruleset screenshot.
+> Screenshot: `submissions/lab3_required_check.png` (ruleset requiring `ci-ok`).
 
 ---
 
