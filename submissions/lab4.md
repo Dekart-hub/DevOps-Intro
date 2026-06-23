@@ -174,17 +174,62 @@ Verified: one instance binds, `/health` returns 200.
 
 ---
 
-## Bonus — Decode the TLS Handshake (optional, +2)
+## Bonus — Decode the TLS Handshake (+2)
 
-Needs a TLS-terminating proxy (Caddy) + Wireshark — neither installed, and `tcpdump`/install need `sudo`. Plan + the part runnable without a GUI:
-- **Proxy (no sudo):** `brew install caddy` → `caddy reverse-proxy --from localhost:8443 --to localhost:8080`.
-- **Capture (sudo):** `sudo tcpdump -i lo0 -s0 -w lab4-tls.pcap 'tcp port 8443'` then `curl -vk https://localhost:8443/health`.
-- **Cert chain (no sudo, runnable now):** `openssl s_client -connect localhost:8443 -showcerts </dev/null`.
-- **Decode:** open `lab4-tls.pcap` in Wireshark; screenshot **ClientHello** (TLS version, cipher suites, SNI) + **ServerHello** (chosen cipher + version) + the cert chain.
-- **What kills TLS 1.0/1.1 in 2026:** the **`supported_versions` negotiation** — a modern server's ServerHello refuses anything below TLS 1.2 (RFC 8996 deprecation; legacy versions lack AEAD ciphers and use weak MAC/`PRF` constructions). Annotate the ClientHello `supported_versions` extension on the screenshot.
+**Setup.** Installed Caddy (`v2.11.4`) and ran it as a TLS-terminating reverse proxy `localhost:8443 → localhost:8080`, with an explicit self-signed cert (`CN=localhost`, SAN `DNS:localhost, IP:127.0.0.1`) so no CA has to be installed into the keychain (avoids `sudo`):
 
-> ⏳ TLS capture + Wireshark screenshots pending (need sudo + GUI). I can set up Caddy and grab the `openssl` cert chain on request.
+```
+localhost:8443 {
+	tls lab4-cert.pem lab4-key.pem
+	reverse_proxy localhost:8080
+}
+```
+
+Verified end-to-end (live): `curl -k https://localhost:8443/health` → `200 {"notes":6,"status":"ok"}`. The handshake below is decoded with `openssl s_client -connect localhost:8443 -servername localhost -trace` — the same fields Wireshark shows under `tls.handshake.type == 1` / `== 2`.
+
+### ClientHello
+```
+ClientHello, Length=1531
+  client_version = 0x303 (TLS 1.2)        # legacy_version field — frozen at 0x303
+  cipher_suites (30 offered, TLS 1.3 first):
+    {0x13,0x02} TLS_AES_256_GCM_SHA384
+    {0x13,0x03} TLS_CHACHA20_POLY1305_SHA256
+    {0x13,0x01} TLS_AES_128_GCM_SHA256
+    {0xC0,0x2C} TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384  … (TLS 1.2 ECDHE/DHE/RSA)
+    … down to {0x00,0x2F} TLS_RSA_WITH_AES_128_CBC_SHA   (legacy CBC)
+  extensions:
+    server_name(0), length=14             # SNI = "localhost"
+    supported_versions(43)                # the REAL version list: TLS 1.3, TLS 1.2
+    ec_point_formats, key_share(51), …
+```
+
+### ServerHello
+```
+ServerHello, Length=1206
+  server_version = 0x303 (TLS 1.2)        # legacy field again — 0x303
+  cipher_suite {0x13,0x01} TLS_AES_128_GCM_SHA256   # chosen
+  extensions:
+    supported_versions(43)                # server's real pick: TLS 1.3
+    key_share(51)
+```
+Negotiated result (s_client summary): **`Protocol: TLSv1.3`, `Cipher: TLS_AES_128_GCM_SHA256`**.
+
+### Certificate chain (`-showcerts`)
+```
+subject=CN=localhost
+issuer =CN=localhost                       # self-signed → subject == issuer → chain length 1
+notBefore=Jun 23 20:36:40 2026 GMT
+notAfter =Jun 25 20:36:40 2026 GMT
+SAN: DNS:localhost, IP Address:127.0.0.1
+Verify return code: 18 (self-signed certificate)
+```
+A public site shows leaf → intermediate → root (length 2–3); this local cert is its own issuer (length 1) — exactly why `curl` needs `-k`.
+
+### Which negotiation step kills TLS 1.0/1.1 in 2026?
+**The `supported_versions` extension (RFC 8446) — not the `version` field.** Note that *both* hellos' `version` fields say **TLS 1.2 (`0x303`)**: that's the frozen **legacy_version**, kept at `0x303` so old middleboxes don't choke. The *real* version is negotiated in **`supported_versions`** — the client lists every version it accepts (here `TLS 1.3, TLS 1.2`) and the server echoes its single choice (`TLS 1.3`). A hardened 2026 server simply doesn't list 1.0/1.1 there and won't select them; per **RFC 8996 (2021)** those versions are formally deprecated (no AEAD ciphers, MD5/SHA-1 in the PRF/Finished, BEAST/POODLE exposure). So the version is decided at `supported_versions`, and that is where 1.0/1.1 are excluded — the legacy `0x303` is a compatibility decoy.
+
+> Optional literal Wireshark screenshots: `brew install --cask wireshark`, capture with `sudo tcpdump -i lo0 -s0 -w lab4-tls.pcap 'tcp port 8443'`, open and filter `tls.handshake.type==1`/`==2`. The `-trace` decode above is the identical data.
 
 ---
 
-*Run notes: the L7 trace and all five §1.3 commands were executed live on macOS; the `tcpdump` packet capture (handshake/close) and the Bonus screenshots require `sudo` / a GUI and are flagged above.*
+*Run notes: the L7 trace, all five §1.3 commands, and the entire Bonus TLS handshake (`openssl -trace` + cert chain) were executed live on macOS. The one remaining step that needs `sudo` is the Task 1 `tcpdump` packet capture (the TCP handshake/FIN), flagged in §1.2.*
