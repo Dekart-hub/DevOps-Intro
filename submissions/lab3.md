@@ -1,6 +1,7 @@
 # Lab 3 — CI/CD
 
-**Chosen path: GitHub Actions.** 
+**Chosen path: GitHub Actions.**
+
 ---
 
 ## Pipeline design
@@ -38,7 +39,7 @@ A **stage** is an ordered phase (`build → test → deploy`); stages run sequen
 
 ### 1.3–1.4 Iterate to green
 
-Link to a **green** CI run: `<https://github.com/Dekart-hub/DevOps-Intro/actions/runs/27647293084>`
+Link to a **green** CI run: <https://github.com/Dekart-hub/DevOps-Intro/actions/runs/27647293084>
 
 ### 1.5 Prove the gate blocks a failure
 
@@ -89,15 +90,17 @@ I do path filtering at the **job level** (`dorny/paths-filter` in the `changes` 
 
 ### 2.4 Measure
 
-Median of 3–5 runs per scenario (runners vary). To get a clean baseline I temporarily disabled each optimization with a commit, captured the run time, then restored it.
+Median of 3 runs per scenario (runners vary). I measured by pushing three faithful variant pipelines — separate `vet`/`test`/`lint` jobs plus an aggregator, differing *only* in the setup-go cache and the matrix (no `changes` path-filter job) — to a throwaway branch, and reading each run's wall-clock (`createdAt → updatedAt`) from the Actions API.
 
-| Scenario | Wall-clock |
-|----------|-----------|
-| Baseline (no cache, single Go version, no path filter) | `<XX s>` |
-| With cache | `<XX s>` |
-| With cache + matrix | `<XX s>` |
+| Scenario | Wall-clock (median of 3) | runs |
+|----------|--------------------------|------|
+| Baseline (no cache, single Go version, no path filter) | **39 s** | 39 / 39 / 39 |
+| With cache | **36 s** | 35 / 36 / 38 |
+| With cache + matrix | **38 s** | 36 / 38 / 40 |
 
-> **Expected finding (not a failure):** the cache rows barely move. QuickNotes has zero third-party deps, so the module cache has nothing to store. As the B.1 profile shows, the wall-clock is dominated by `go test -race` (~20 s) and the serial `changes → matrix → ci-ok` chain — not by anything a module cache touches. The Go build cache and the linter's analysis cache are the only caches with anything to do here, and `-race` re-instruments the test binary every run, so even those barely help. On a dependency-heavy project the module cache is where caching would pay; here it is inert.
+For reference, the **full production pipeline** (cache + matrix + path-filter + the Bonus optimizations) runs **~64 s** (median of 3: 50 / 64 / 66). The ~25 s gap over the baseline is almost entirely the `changes` path-filter job's serial hop — it runs first, *then* the matrix starts. That is the deliberate §2.3 trade: the path filter *adds* a serial step to every `app` PR in exchange for skipping the whole matrix on docs-only PRs.
+
+> **What the cache actually does (the interesting part):** the cache barely moves the *pipeline* wall-clock (39 → 36 s), but it transforms the **lint job**. With the Go *build* cache warm, the `golangci-lint` step runs in ~7 s; with it cold (cache off) it takes ~17–20 s, because the linter must compile the code (and its analysis) from scratch. That ~13 s win is invisible at the pipeline level because `test` (`-race`, ~17–22 s, uncacheable) runs in parallel and gates the critical path. QuickNotes has zero third-party deps, so the *module* cache is inert — it is the *build* cache that pays, and only on lint. On a dependency-heavy project the module cache is where caching would matter.
 
 ### 2.5 Design questions
 
@@ -132,20 +135,22 @@ On top of each job total sits ~2–12 s of GitHub runner-allocation latency (job
 
 1. **`concurrency` with `cancel-in-progress: true`** — a newer push to the same ref cancels the in-flight run, so iterating to green doesn't stack up redundant runs and burn minutes.
 2. **`GOFLAGS=-buildvcs=false`** — skips git VCS stamping during build/test, removing a small per-invocation cost and dropping a git dependency from the build step (CI clones shallow).
-3. **golangci-lint-action's built-in caching** (`install-mode: binary` + analysis cache) — reuses the linter binary and lint analysis cache between runs instead of `go install`-ing the linter and re-analyzing cold every time. On a zero-dep module this is the single biggest real saver, because the cold linter install + first analysis is the heaviest step.
+3. **golangci-lint-action's built-in caching** (`install-mode: binary` + the Go build cache) — pulls the prebuilt linter binary instead of `go install`-compiling it, and reuses a warm build cache so the linter doesn't recompile the code it analyzes. Measured: the `golangci-lint` step drops from ~17–20 s (cold) to ~7 s (warm) — the single biggest *per-step* saver (see B.3), though it is masked at the pipeline level by the `test -race` critical path.
 
 (Considered but not applicable: a smaller `golang:1.24-alpine` *container* image — this pipeline uses `setup-go` on the `ubuntu-24.04` runner, not a job container, so there's no base image to slim.)
 
 ### B.3 Before/after
 
-> **TODO:** measure each (median of 3–5 runs).
+Median of 3 runs. The lint-step rows are the `golangci-lint` step duration; the pipeline row is end-to-end wall-clock. Two of the three are honestly *not* single-run wall-clock wins — and that is itself the finding.
 
-| Optimization | Before (s) | After (s) | Saving |
-|--------------|-----------:|----------:|-------:|
-| concurrency cancel-in-progress | `<XX>` | `<XX>` | `<-XX>` |
-| `-buildvcs=false` | `<XX>` | `<XX>` | `<-XX>` |
-| golangci-lint cache | `<XX>` | `<XX>` | `<-XX>` |
-| **Total wall-clock** | **`<XX>`** | **`<XX>`** | **`<-XX>`** |
+| Optimization | Before | After | Saving |
+|--------------|-------:|------:|-------:|
+| golangci-lint caching (cold vs warm build cache) | ~20 s *(lint step)* | ~7 s *(lint step)* | **−13 s** on lint |
+| `-buildvcs=false` | within ±2 s noise | — | ~0 s\* |
+| concurrency `cancel-in-progress` | no single-run effect | no single-run effect | 0 s/run\* |
+| **Pipeline wall-clock** | **39 s** | **36 s** | **−3 s** |
+
+\* `-buildvcs=false` removes git VCS stamping — sub-second here; its real value is dropping a git dependency so the step can't fail on CI's shallow clone. `concurrency` cancels *superseded* in-flight runs, so it saves whole redundant runs (and runner minutes) while iterating, not time within a single run. The only optimization that cuts real work is warming the build cache for `golangci-lint` (−13 s on the lint step) — but `test -race` gates the critical path, so the **pipeline** wall-clock only drops ~3 s.
 
 ### B.4 Bottleneck analysis
 
