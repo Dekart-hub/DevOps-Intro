@@ -75,7 +75,17 @@ On **my fork** (`Dekart-hub/DevOps-Intro`), `main` requires status checks to pas
 
 I do path filtering at the **job level** (`dorny/paths-filter` in the `changes` job), *not* via `on.pull_request.paths`. A top-level path filter skips the whole workflow on a docs-only PR, which leaves the required `ci-ok` check stuck at "Expected — waiting for status" forever — the PR could never merge. With job-level filtering the workflow always reports: on a docs-only PR the `vet`/`test`/`lint` jobs skip (their `if:` is false) and `ci-ok` passes on the skips, so the README PR costs ~one cheap `changes` job instead of a full matrix.
 
-> **TODO:** link to a docs-only PR showing `vet`/`test`/`lint` skipped and `ci-ok` green.
+> **Evidence — PR #6** (<https://github.com/Dekart-hub/DevOps-Intro/pull/6>): a docs-only change (one Markdown file under `submissions/`). The run (<https://github.com/Dekart-hub/DevOps-Intro/actions/runs/28050478263>) reported:
+>
+> | check | conclusion |
+> |-------|-----------|
+> | `changes` | success |
+> | `vet` | **skipped** |
+> | `test` | **skipped** |
+> | `lint` | **skipped** |
+> | `ci-ok` | **success** |
+>
+> The PR stayed green and mergeable while paying only the cheap `changes` job — a top-level `paths:` filter would instead have left the required `ci-ok` stuck at "Expected" and blocked the merge forever.
 
 ### 2.4 Measure
 
@@ -87,7 +97,7 @@ Median of 3–5 runs per scenario (runners vary). To get a clean baseline I temp
 | With cache | `<XX s>` |
 | With cache + matrix | `<XX s>` |
 
-> **Expected finding (not a failure):** the cache rows barely move. QuickNotes has zero third-party deps, so the module cache has nothing to store; most of the ~60–80 s is runner provisioning, checkout, and the Go toolchain download — none of which the module cache touches. The build cache and the linter's analysis cache are the only caches that help here. Compare per-step durations (`setup-go`, `go test`, `golangci-lint`) rather than job totals to see where caching *would* pay on a dependency-heavy project.
+> **Expected finding (not a failure):** the cache rows barely move. QuickNotes has zero third-party deps, so the module cache has nothing to store. As the B.1 profile shows, the wall-clock is dominated by `go test -race` (~20 s) and the serial `changes → matrix → ci-ok` chain — not by anything a module cache touches. The Go build cache and the linter's analysis cache are the only caches with anything to do here, and `-race` re-instruments the test binary every run, so even those barely help. On a dependency-heavy project the module cache is where caching would pay; here it is inert.
 
 ### 2.5 Design questions
 
@@ -104,16 +114,19 @@ A PR from an untrusted branch can run a job that *writes* a cache entry; if a la
 
 ## Bonus — Pipeline Performance Investigation
 
-### B.1 Profile (per-step, from the CI UI)
+### B.1 Profile (per-step, from one representative run)
 
-> **TODO:** fill from the per-step timing breakdown of one run.
+Per-step seconds from run [`28047672107`](https://github.com/Dekart-hub/DevOps-Intro/actions/runs/28047672107) (full matrix), pulled via `gh api .../actions/runs/<id>/jobs`. Representative cells: `vet (1.24)`, `test (1.24)`, `lint`.
 
 | Step | vet | test | lint |
 |------|----:|-----:|-----:|
-| Runner start | `<s>` | `<s>` | `<s>` |
-| Dependency setup (`setup-go` / install) | `<s>` | `<s>` | `<s>` |
-| Actual work (vet / test / lint) | `<s>` | `<s>` | `<s>` |
-| Cleanup | `<s>` | `<s>` | `<s>` |
+| Runner start (`Set up job`) | 1 | ~1 | 1 |
+| Dependency setup (`checkout` + `setup-go`) | 2 | 2 | 2 |
+| Actual work (`go vet` / `go test -race` / `golangci-lint`) | 1 | **22** | 8 |
+| Cleanup (`Post …` + `Complete job`) | 0 | 1 | 0 |
+| **Job total (s)** | **7** | **27** | **14** |
+
+On top of each job total sits ~2–12 s of GitHub runner-allocation latency (job wall-clock minus the sum of its steps), attributable to no single step. Headline: **`go test -race` (~17–22 s) is the most expensive operation in the pipeline by an order of magnitude** — far more than `go vet` (~1 s) or even the linter (~8 s).
 
 ### B.2 Optimizations applied (≥3 beyond Task 2's cache/matrix/path-filter)
 
@@ -136,6 +149,4 @@ A PR from an untrusted branch can run a job that *writes* a cache entry; if a la
 
 ### B.4 Bottleneck analysis
 
-The dominant remaining cost is runner provisioning plus the Go toolchain setup — spinning up the `ubuntu-24.04` VM, checking out, and `setup-go` installing/restoring the toolchain. The actual `go vet` / `go test` / `golangci-lint` work over a few hundred lines of zero-dependency Go is a second or two. Caching the module download can't help because there's nothing to download (no `go.sum`); only the Go build cache and the linter's analysis cache move the needle. To make the pipeline meaningfully shorter I'd have to change QuickNotes itself — and there's almost nothing to cut on the work side, so the real wins would be fewer matrix cells or a prebuilt image with Go + `golangci-lint` baked in (trading image maintenance for setup time). I'd stop optimizing once the full pipeline is reliably under ~90 s, because below that the pipeline is no longer what anyone waits on — reviewer attention and merge latency dominate, and further engineering would cost more than the seconds it saves.
-
-> **TODO:** state whether you hit ≤ 90 s, or report the dominant cost if not.
+The full pipeline's measured wall-clock is **~50–66 s (median 64 s** over 3 successful runs), so it clears the **≤ 90 s** bar with room to spare — below this the pipeline isn't what anyone waits on; reviewer attention and merge latency dominate. The B.1 profile corrects the tempting guess that runner provisioning is the bottleneck: setup (runner + `checkout` + `setup-go`) is only ~3–8 s per job. The real cost is **`go test -race` at ~17–22 s**, stretched by the serial critical path `changes` (~14 s) → matrix → `ci-ok` (~13 s) plus ~2–12 s of per-job runner-allocation latency. None of this is cacheable here: there are no modules to cache (no `go.sum`), and `-race` re-instruments the test binary every run, so even a warm build cache barely moves the one step that matters. The only real levers left — dropping `-race`, dropping a matrix cell, or removing the `changes` serial hop — each trade away safety or coverage for a few seconds, which isn't worth it under 64 s, so I'd stop optimizing here.
