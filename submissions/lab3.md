@@ -38,9 +38,7 @@ A **stage** is an ordered phase (`build → test → deploy`); stages run sequen
 
 ### 1.3–1.4 Iterate to green
 
-Branch, commit (signed), push, open a draft PR **to my fork's `main`**, read the CI output, fix until green, then mark ready.
-
-> **TODO:** link to a **green** CI run: `<https://github.com/Dekart-hub/DevOps-Intro/actions/runs/...>`
+Link to a **green** CI run: `<https://github.com/Dekart-hub/DevOps-Intro/actions/runs/27647293084>`
 
 ### 1.5 Prove the gate blocks a failure
 
@@ -68,7 +66,7 @@ On **my fork** (`Dekart-hub/DevOps-Intro`), `main` requires status checks to pas
 
 `vet` and `test` run on a `['1.23', '1.24']` matrix with `fail-fast: false` so one bad cell doesn't cancel the others. I require only the `ci-ok` aggregation job in branch protection (not the individual cells), so the matrix can change without ever leaving a stale required check stuck at "Expected — waiting for status". `ci-ok` uses `if: always()` so it still runs when an upstream job fails or is skipped, and it blocks only on `failure`/`cancelled` (a `skipped` job is allowed — that's the docs-only case).
 
-> **Honest note on the matrix:** because `app/go.mod` declares `go 1.24`, the `1.23` cell doesn't truly run on 1.23 — Go's toolchain directive (`GOTOOLCHAIN=auto`) makes it auto-download and use 1.24 to satisfy the module's floor. So the matrix currently proves "passes from two `setup-go` entry points on the 1.24 toolchain" rather than genuinely exercising 1.23. Truly testing 1.23 would mean lowering the `go` directive (not allowed — it's the provided app) or setting `GOTOOLCHAIN=local`, which would make the 1.23 cell fail by design. I kept `1.23`/`1.24` as the lab specifies and flag this so a green 1.23 cell isn't mistaken for real 1.23 coverage.
+> **Honest note on the matrix:** `app/go.mod` declares `go 1.24`, so Go 1.23 cannot build the module. `actions/setup-go` exports `GOTOOLCHAIN=local` to keep each cell on exactly the version it installed — which makes the `1.23` cell fail hard with `go: go.mod requires go >= 1.24 (running go 1.23.12; GOTOOLCHAIN=local)`. I override that with `GOTOOLCHAIN=auto` on the `vet`/`test` commands so the `1.23` cell auto-fetches the 1.24 toolchain to satisfy the floor. Net effect: the `1.23` cell really runs 1.24, so the matrix proves "passes from two `setup-go` entry points" rather than genuinely exercising 1.23 — true 1.23 coverage is impossible here without lowering the `go` directive in the provided app. I kept `1.23`/`1.24` as the lab specifies and flag this so a green `1.23` cell isn't mistaken for real 1.23 coverage.
 
 ### 2.3 Skip docs-only changes
 
