@@ -56,13 +56,34 @@ sudo chown $USER lab4-trace.pcap
 tcpdump -r lab4-trace.pcap -nn -A | tee lab4-trace.txt
 ```
 
-**The four landmarks to annotate in `lab4-trace.txt`:**
-- **TCP three-way handshake** — `Flags [S]` (SYN, client→`::1.8080`) → `Flags [S.]` (SYN/ACK) → `Flags [.]` (ACK).
-- **HTTP request** — `POST /notes HTTP/1.1` + the 39-byte JSON body (above).
-- **HTTP response** — `HTTP/1.1 201 Created` + the 90-byte JSON.
-- **Connection close** — `Flags [F.]` (FIN) + ACKs (or `[R]` RST if abrupt). `curl` left it keep-alive, so the FIN comes at idle/exit.
+**Annotated capture** (full 49-line `tcpdump -A` decode in `submissions/lab4-trace.txt`; IPv6 `::1`, client port `55767`, whole exchange ≈ **2 ms** on loopback):
 
-> ⏳ **Packet-level excerpt pending** — `tcpdump` needs `sudo` (unavailable to the automation). The annotated handshake/close lines from `lab4-trace.txt` go here.
+```
+# ── TCP three-way handshake ──
+::1.55767 > ::1.8080  Flags [S]   seq 1780857576                 # SYN      client → server
+::1.8080 > ::1.55767  Flags [S.]  seq 356502827 ack 1780857577   # SYN/ACK  server → client
+::1.55767 > ::1.8080  Flags [.]   ack 1                          # ACK      → established
+
+# ── HTTP request ──
+::1.55767 > ::1.8080  Flags [P.]  seq 1:175  len 174  POST /notes HTTP/1.1
+      Content-Type: application/json   Content-Length: 39
+      {"title":"trace me","body":"in flight"}
+::1.8080 > ::1.55767  Flags [.]   ack 175                        # server ACKs the request
+
+# ── HTTP response ──
+::1.8080 > ::1.55767  Flags [P.]  seq 1:204  len 203  HTTP/1.1 201 Created
+      Content-Type: application/json   Content-Length: 90
+      {"id":8,...,"created_at":"2026-06-23T20:52:33.140699Z"}
+::1.55767 > ::1.8080  Flags [.]   ack 204                        # client ACKs the response
+
+# ── Connection close (graceful 4-way FIN, not RST) ──
+::1.55767 > ::1.8080  Flags [F.]  seq 175    # FIN  client initiates close
+::1.8080 > ::1.55767  Flags [.]   ack 176    # server ACKs the FIN
+::1.8080 > ::1.55767  Flags [F.]  seq 204    # FIN  server
+::1.55767 > ::1.8080  Flags [.]   ack 205    # client final ACK → fully closed
+```
+
+All four landmarks present: **handshake** (`[S]`/`[S.]`/`[.]`), **request** (`POST /notes` + body), **response** (`201 Created` + JSON), **close** (two-sided `[F.]` — a clean `FIN`, not an abrupt `RST`).
 
 ### 1.3 — The five debugging commands (macOS-adapted, run live)
 
@@ -232,4 +253,4 @@ A public site shows leaf → intermediate → root (length 2–3); this local ce
 
 ---
 
-*Run notes: the L7 trace, all five §1.3 commands, and the entire Bonus TLS handshake (`openssl -trace` + cert chain) were executed live on macOS. The one remaining step that needs `sudo` is the Task 1 `tcpdump` packet capture (the TCP handshake/FIN), flagged in §1.2.*
+*Run notes: every part of this lab was executed live on macOS — the L7 trace, the §1.2 `tcpdump` packet capture (run with `sudo`), all five §1.3 commands, and the full Bonus TLS handshake (`openssl -trace` + cert chain).*
