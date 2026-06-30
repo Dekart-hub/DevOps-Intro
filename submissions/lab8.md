@@ -340,21 +340,26 @@ $ curl .../metrics               HTTP 200   time_total=0.462s
 
 ### Internal vs external comparison
 
-The full 30-minute Checkly run is the account holder's step (free Checkly
-account, `npx checkly deploy`, let it run, read p50/p95 from the dashboard - see
-`monitoring/checkly/README.md`). The Prometheus (internal) side and an indicative
-external single-region figure are filled below:
+The Checkly check ran every minute for ~35 minutes from Frankfurt and Singapore
+against the public tunnel URL. Both viewpoints over that window:
 
-| | Prometheus (inside the Compose net) | Checkly (Frankfurt + Singapore) |
+| Metric | Prometheus (inside the Compose net) | Checkly (Frankfurt + Singapore) |
 |--|--|--|
-| Avg latency p50 | ~1.1 ms (scrape_duration_seconds avg) | _fill from Checkly_ (indicative tunnel RTT ~330 ms) |
-| Avg latency p95 | ~2.2 ms (no request histogram, scrape proxy) | _fill from Checkly_ (indicative ~460 ms) |
-| Errors observed | from `..._by_code_total`: ~3% baseline, 0 5xx | _fill from Checkly_ |
+| Latency p50 | ~1.1 ms (scrape_duration avg) | 367 ms (Frankfurt 324 ms, Singapore 851 ms) |
+| Latency p95 | ~2.2 ms (no request histogram) | 922 ms (Frankfurt 403 ms, Singapore 1.22 s) |
+| Errors observed | ~3% 4xx baseline by code, 0 5xx | 0 failures, 100% availability (1 Singapore probe degraded at 1.22 s) |
 
-Internal "latency" here is Prometheus's own scrape duration (sub-millisecond to a
-couple of ms) - the app has no request-duration histogram. External latency is
-two-plus orders of magnitude higher because it includes DNS, TLS, the Cloudflare
-edge, the tunnel, and the return trip.
+![Checkly QuickNotes /health from Frankfurt and Singapore](3.png)
+
+Internal "latency" here is Prometheus's own scrape duration (about 1 ms) - the
+app exposes no request-duration histogram. External latency is two-plus orders of
+magnitude higher because it includes DNS, TLS, the Cloudflare edge, the tunnel,
+and the round trip from each region. The two regions also diverge sharply:
+Singapore's p95 (1.22 s) is roughly 3x Frankfurt's (0.40 s) purely because of
+distance to the Warsaw-edged tunnel, and one Singapore probe crossed the 1 s
+"degraded" line - a geographic effect Prometheus, scraping from inside the
+network, is completely blind to. Availability was 100% (no run breached the 2 s
+hard-fail threshold).
 
 ### Failure-mode analysis
 
