@@ -18,7 +18,7 @@
     quicknotes_data_path: "{{ quicknotes_data_dir }}/notes.json"
     quicknotes_service_name: quicknotes
     listen_addr: ":8080"
-    quicknotes_restart_sec: 4
+    quicknotes_restart_sec: 6
 
     ansible_pull_repo_url: https://github.com/Dekart-hub/DevOps-Intro.git
     ansible_pull_branch: feature/lab7
