@@ -1,0 +1,5 @@
+# Local inventory for ansible-pull: the VM reconciles itself, so the host group
+# the playbook targets resolves to localhost over a local connection (no SSH
+# back into the same machine).
+[lab5_vm]
+localhost ansible_connection=local ansible_python_interpreter=/usr/bin/python3

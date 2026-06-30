@@ -20,6 +20,14 @@
     listen_addr: ":8080"
     quicknotes_restart_sec: 4
 
+    ansible_pull_repo_url: https://github.com/Dekart-hub/DevOps-Intro.git
+    ansible_pull_branch: feature/lab7
+    ansible_pull_clone_dir: /opt/quicknotes-ansible
+    ansible_pull_config_dir: /etc/quicknotes-ansible
+    ansible_pull_inventory_path: "{{ ansible_pull_config_dir }}/inventory.ini"
+    ansible_pull_service_name: ansible-pull-quicknotes
+    ansible_pull_timer_name: ansible-pull-quicknotes.timer
+
   tasks:
     - name: Create the quicknotes system group
       ansible.builtin.group:
@@ -83,6 +91,58 @@
         name: "{{ quicknotes_service_name }}"
         enabled: true
         state: started
+
+    # Bonus: ansible-pull GitOps loop. The VM clones the fork and re-applies this
+    # same playbook against itself on a 5-minute systemd timer.
+    - name: Install git and ansible for ansible-pull
+      ansible.builtin.apt:
+        name:
+          - ansible
+          - git
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Ensure the ansible-pull config directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_pull_config_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Render the ansible-pull local inventory
+      ansible.builtin.template:
+        src: templates/pull-inventory.ini.j2
+        dest: "{{ ansible_pull_inventory_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Render the ansible-pull service unit
+      ansible.builtin.template:
+        src: templates/ansible-pull.service.j2
+        dest: "/etc/systemd/system/{{ ansible_pull_service_name }}.service"
+        owner: root
+        group: root
+        mode: "0644"
+      register: ansible_pull_service_unit
+
+    - name: Render the ansible-pull timer unit
+      ansible.builtin.template:
+        src: templates/ansible-pull.timer.j2
+        dest: "/etc/systemd/system/{{ ansible_pull_timer_name }}"
+        owner: root
+        group: root
+        mode: "0644"
+      register: ansible_pull_timer_unit
+
+    - name: Enable and start the ansible-pull timer
+      ansible.builtin.systemd:
+        name: "{{ ansible_pull_timer_name }}"
+        enabled: true
+        state: started
+        daemon_reload: "{{ ansible_pull_service_unit.changed or ansible_pull_timer_unit.changed }}"
 
   handlers:
     - name: Restart quicknotes
