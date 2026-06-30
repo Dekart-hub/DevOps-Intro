@@ -1,6 +1,6 @@
 # Runbook: QuickNotes High Error Rate
 
-**Alert:** `QuickNotesHighErrorRate`  ·  **Severity:** `page`
+**Alert:** `QuickNotesHighErrorRate` | **Severity:** `page`
 
 ## What this alert means
 
