@@ -55,6 +55,10 @@ Thumbs.db
 # Local secrets (Lab 8 Grafana admin password). .env.example IS committed.
 .env
 
+# Node deps / Checkly CLI state (Lab 8 bonus). The *.ts checks ARE committed.
+node_modules/
+.checkly/
+
 # NOTE: deliberately NOT ignored, because students commit them as lab evidence:
 #   submissions/labN.md        (lab reports)
 #   .github/workflows/*.yml    (Lab 3 CI)

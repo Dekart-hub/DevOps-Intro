@@ -1,0 +1,14 @@
+{
+  "name": "quicknotes-checkly",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Checkly synthetic monitoring for QuickNotes (Lab 8 bonus)",
+  "scripts": {
+    "test": "checkly test --record",
+    "deploy": "checkly deploy",
+    "destroy": "checkly destroy"
+  },
+  "devDependencies": {
+    "checkly": "^8.10.0"
+  }
+}
