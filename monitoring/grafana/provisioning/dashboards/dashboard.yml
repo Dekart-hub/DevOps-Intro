@@ -1,0 +1,16 @@
+# Tells Grafana to load dashboards from files on disk at startup and keep
+# watching that directory. The path is INSIDE the container - it must match the
+# bind mount in compose.yaml (./monitoring/grafana/dashboards -> here).
+apiVersion: 1
+
+providers:
+  - name: quicknotes
+    orgId: 1
+    folder: QuickNotes
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    updateIntervalSeconds: 10
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

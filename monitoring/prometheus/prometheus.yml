@@ -1,0 +1,23 @@
+# Prometheus scrape + rule config for the QuickNotes monitoring stack.
+# Mounted read-only into the prometheus container at /etc/prometheus/.
+global:
+  # How often Prometheus scrapes every target. 15s is the standard default:
+  # fresh enough to see incidents, cheap enough not to flood the TSDB.
+  scrape_interval: 15s
+  scrape_timeout: 10s
+
+# Alerting rules live in their own directory, mounted read-only alongside this
+# file. The glob picks up high-error-rate.yml (Task 2).
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+scrape_configs:
+  # One job for QuickNotes. Prometheus PULLS metrics from the app, so the app
+  # must be reachable from this container. The target is the Compose SERVICE
+  # NAME + the port QuickNotes listens on inside the network; Compose DNS
+  # resolves "quicknotes" to the service's container IP.
+  - job_name: quicknotes
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - quicknotes:8080

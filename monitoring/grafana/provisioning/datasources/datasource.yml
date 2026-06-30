@@ -1,0 +1,19 @@
+# Auto-provisions the Prometheus data source on Grafana startup, so a fresh
+# stack comes up already wired - no clicking through the UI.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    # A fixed uid lets the provisioned dashboard reference this data source
+    # portably (the dashboard JSON pins datasource uid = quicknotes-prometheus).
+    uid: quicknotes-prometheus
+    type: prometheus
+    access: proxy
+    # The Prometheus Compose service, resolved by Compose DNS on the network.
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      # Match the Prometheus scrape_interval so $__rate_interval picks a sane
+      # rate window.
+      timeInterval: 15s

@@ -52,6 +52,9 @@ Thumbs.db
 # Local agent config (not part of the course)
 .claude/
 
+# Local secrets (Lab 8 Grafana admin password). .env.example IS committed.
+.env
+
 # NOTE: deliberately NOT ignored, because students commit them as lab evidence:
 #   submissions/labN.md        (lab reports)
 #   .github/workflows/*.yml    (Lab 3 CI)
